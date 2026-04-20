@@ -2,7 +2,7 @@
 
 /**
  * Plugin Name: Sistema de Reservas
- * Description: Sistema completo de reservas para servicios de transporte - CON RECORDATORIOS AUTOMÁTICOS
+ * Description: Sistema completooo de reservas para servicios de transporte - CON RECORDATORIOS AUTOMÁTICOS
  * Version: 1.000
  */
 
@@ -154,6 +154,7 @@ class SistemaReservas
             'includes/class-agency-services-admin.php',
             'includes/class-agency-services-frontend.php',
             'includes/class-visitas-report-pdf-generator.php',
+            'includes/class-public-api.php',
         );
 
         foreach ($files as $file) {
@@ -176,6 +177,10 @@ class SistemaReservas
         if (class_exists('ReservasDashboard')) {
             $this->dashboard = new ReservasDashboard();
         }
+
+        if (class_exists('ReservasPublicAPI')) {
+    new ReservasPublicAPI();
+}
 
         if (class_exists('ReservasAgencyServicesFrontend')) {
             new ReservasAgencyServicesFrontend();
@@ -691,6 +696,46 @@ class SistemaReservas
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql_configuration);
 
+
+        // Tabla de API Keys
+$table_api_keys = $wpdb->prefix . 'reservas_api_keys';
+$sql_api_keys = "CREATE TABLE $table_api_keys (
+    id mediumint(9) NOT NULL AUTO_INCREMENT,
+    partner_name varchar(100) NOT NULL,
+    api_key varchar(64) NOT NULL UNIQUE,
+    api_secret varchar(64) NOT NULL,
+    status enum('active','inactive','suspended') DEFAULT 'active',
+    requests_today int(11) DEFAULT 0,
+    requests_limit int(11) DEFAULT 1000,
+    last_request datetime NULL,
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY api_key (api_key)
+) $charset_collate;";
+dbDelta($sql_api_keys);
+
+// Tabla de reservas hechas por API (para reports)
+$table_api_bookings = $wpdb->prefix . 'reservas_api_bookings';
+$sql_api_bookings = "CREATE TABLE $table_api_bookings (
+    id mediumint(9) NOT NULL AUTO_INCREMENT,
+    partner_id mediumint(9) NOT NULL,
+    partner_name varchar(100) NOT NULL,
+    partner_booking_id varchar(100) DEFAULT '',
+    service_id mediumint(9) NOT NULL,
+    fecha date NOT NULL,
+    hora time NOT NULL,
+    seats int(11) NOT NULL,
+    customer_name varchar(200) DEFAULT '',
+    status enum('confirmed','cancelled') DEFAULT 'confirmed',
+    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY partner_id (partner_id),
+    KEY service_id (service_id),
+    KEY fecha (fecha),
+    KEY status (status)
+) $charset_collate;";
+dbDelta($sql_api_bookings);
+
         // Crear usuario super admin inicial
         $this->create_super_admin();
 
@@ -848,6 +893,17 @@ class SistemaReservas
             $wpdb->query("ALTER TABLE $table_reservas ADD COLUMN fecha_cancelacion DATETIME NULL");
             error_log('✅ Columnas de cancelación añadidas a tabla de reservas');
         }
+
+        // Crear tablas API si no existen
+$table_api_keys = $wpdb->prefix . 'reservas_api_keys';
+if ($wpdb->get_var("SHOW TABLES LIKE '$table_api_keys'") != $table_api_keys) {
+    // pegar aquí el mismo SQL de arriba
+}
+
+$table_api_bookings = $wpdb->prefix . 'reservas_api_bookings';
+if ($wpdb->get_var("SHOW TABLES LIKE '$table_api_bookings'") != $table_api_bookings) {
+    // pegar aquí el mismo SQL de arriba
+}
 
         // ✅ ACTUALIZAR CONFIGURACIÓN
 
@@ -1514,7 +1570,7 @@ function confirmacion_reserva_shortcode()
                 max-width: none;
             }
 
-            .service-card{
+            .service-card {
                 max-width: 100% !important;
             }
 
@@ -3605,6 +3661,101 @@ function check_redsys_return_url_visitas()
             }
         }
     }
+}
+
+
+add_action('wp_ajax_get_api_keys_list',       'ajax_get_api_keys_list');
+add_action('wp_ajax_create_api_key',          'ajax_create_api_key');
+add_action('wp_ajax_toggle_api_key_status',   'ajax_toggle_api_key_status');
+add_action('wp_ajax_delete_api_key',          'ajax_delete_api_key');
+add_action('wp_ajax_get_api_bookings_report', 'ajax_get_api_bookings_report');
+
+function ajax_get_api_keys_list() {
+    if (!wp_verify_nonce($_POST['nonce'], 'reservas_nonce')) wp_die('Seguridad');
+    if ($_SESSION['reservas_user']['role'] !== 'super_admin') wp_send_json_error('Sin permisos');
+
+    global $wpdb;
+    $keys = $wpdb->get_results(
+        "SELECT id, partner_name, api_key, status, requests_today, requests_limit, last_request
+         FROM {$wpdb->prefix}reservas_api_keys ORDER BY id DESC"
+    );
+    wp_send_json_success($keys);
+}
+
+function ajax_create_api_key() {
+    if (!wp_verify_nonce($_POST['nonce'], 'reservas_nonce')) wp_die('Seguridad');
+    if ($_SESSION['reservas_user']['role'] !== 'super_admin') wp_send_json_error('Sin permisos');
+
+    global $wpdb;
+    $name  = sanitize_text_field($_POST['partner_name']);
+    $limit = max(10, intval($_POST['request_limit'] ?? 1000));
+
+    if (empty($name)) wp_send_json_error('El nombre es obligatorio');
+
+    $api_key    = 'RES_' . strtoupper(substr(md5(uniqid(rand(), true)), 0, 20));
+    $api_secret = bin2hex(random_bytes(20));
+
+    $wpdb->insert(
+        $wpdb->prefix . 'reservas_api_keys',
+        array(
+            'partner_name'   => $name,
+            'api_key'        => $api_key,
+            'api_secret'     => $api_secret,
+            'requests_limit' => $limit,
+            'status'         => 'active',
+        )
+    );
+
+    wp_send_json_success(array(
+        'partner_name' => $name,
+        'api_key'      => $api_key,
+        'api_secret'   => $api_secret,
+    ));
+}
+
+function ajax_toggle_api_key_status() {
+    if (!wp_verify_nonce($_POST['nonce'], 'reservas_nonce')) wp_die('Seguridad');
+    if ($_SESSION['reservas_user']['role'] !== 'super_admin') wp_send_json_error('Sin permisos');
+
+    global $wpdb;
+    $id     = intval($_POST['key_id']);
+    $status = $_POST['status'] === 'active' ? 'active' : 'suspended';
+    $wpdb->update($wpdb->prefix . 'reservas_api_keys', array('status' => $status), array('id' => $id));
+    wp_send_json_success();
+}
+
+function ajax_delete_api_key() {
+    if (!wp_verify_nonce($_POST['nonce'], 'reservas_nonce')) wp_die('Seguridad');
+    if ($_SESSION['reservas_user']['role'] !== 'super_admin') wp_send_json_error('Sin permisos');
+
+    global $wpdb;
+    $wpdb->delete($wpdb->prefix . 'reservas_api_keys', array('id' => intval($_POST['key_id'])));
+    wp_send_json_success();
+}
+
+function ajax_get_api_bookings_report() {
+    if (!wp_verify_nonce($_POST['nonce'], 'reservas_nonce')) wp_die('Seguridad');
+    if (!in_array($_SESSION['reservas_user']['role'], array('super_admin', 'admin'))) {
+        wp_send_json_error('Sin permisos');
+    }
+
+    global $wpdb;
+    $table   = $wpdb->prefix . 'reservas_api_bookings';
+    $partner = sanitize_text_field($_POST['partner'] ?? '');
+    $from    = sanitize_text_field($_POST['date_from'] ?? date('Y-m-01'));
+    $to      = sanitize_text_field($_POST['date_to']   ?? date('Y-m-d'));
+
+    $where = "WHERE fecha BETWEEN '$from' AND '$to'";
+    if ($partner) $where .= $wpdb->prepare(" AND partner_name = %s", $partner);
+
+    $bookings = $wpdb->get_results("SELECT * FROM $table $where ORDER BY created_at DESC");
+    $total_seats = array_sum(array_column($bookings, 'seats'));
+
+    wp_send_json_success(array(
+        'bookings'     => $bookings,
+        'total_seats'  => $total_seats,
+        'total_bookings' => count($bookings),
+    ));
 }
 
 

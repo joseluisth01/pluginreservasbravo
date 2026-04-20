@@ -17142,6 +17142,234 @@ function generateVisitasPDFWithSchedules() {
 }
 
 
+function loadApiKeysSection() {
+    document.body.innerHTML = `
+        <div style="padding:20px;max-width:950px;margin:0 auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:20px;border-bottom:2px solid #6f42c1;">
+                <h1 style="margin:0;color:#23282d;">🔑 API para Partners Externos</h1>
+                <button class="btn-secondary" onclick="goBackToDashboard()">← Volver al Dashboard</button>
+            </div>
+
+            <div style="background:#e3f2fd;padding:18px;border-radius:8px;margin-bottom:20px;border-left:4px solid #2196f3;font-size:14px;">
+                <strong>📡 Base URL:</strong>
+                <code style="background:#fff;padding:4px 10px;border-radius:4px;margin-left:8px;" id="api-base-url"></code>
+                <br><br>
+                <strong>Endpoints:</strong>
+                <ul style="margin:8px 0 0 0;line-height:2;">
+                    <li><code>GET availability?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD</code> — Ver plazas disponibles</li>
+                    <li><code>POST booking</code> — Comprar y restar plazas</li>
+                </ul>
+                <strong>Cabeceras requeridas:</strong>
+                <code style="margin-left:8px;">X-API-Key</code> y <code>X-API-Secret</code>
+            </div>
+
+            <div style="display:flex;gap:10px;margin-bottom:20px;">
+                <button onclick="showCreateApiKeyModal()"
+                    style="background:#28a745;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:600;">
+                    ➕ Nueva API Key
+                </button>
+                <button onclick="loadApiBookingsReport()"
+                    style="background:#0073aa;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:600;">
+                    📊 Ver Reservas por API
+                </button>
+            </div>
+
+            <div id="api-keys-table-container">
+                <div class="loading">Cargando API keys...</div>
+            </div>
+
+            <div id="api-report-container" style="margin-top:30px;"></div>
+        </div>
+    `;
+
+    // Poner la URL base
+    document.getElementById('api-base-url').textContent = window.location.origin + '/wp-json/reservas/v1/';
+
+    // Cargar la tabla de keys via AJAX
+    jQuery.ajax({
+        url: reservasAjax.ajax_url,
+        type: 'POST',
+        data: { action: 'get_api_keys_list', nonce: reservasAjax.nonce },
+        success: function(r) {
+            if (!r.success) {
+                document.getElementById('api-keys-table-container').innerHTML = '<div class="error">Error cargando API keys: ' + r.data + '</div>';
+                return;
+            }
+
+            const keys = r.data;
+
+            let rows = keys.length === 0
+                ? '<tr><td colspan="5" style="padding:25px;text-align:center;color:#666;">No hay API keys creadas todavía</td></tr>'
+                : keys.map(k => `
+                    <tr style="border-bottom:1px solid #f0f0f0;">
+                        <td style="padding:12px;font-weight:600;">${k.partner_name}</td>
+                        <td style="padding:12px;font-family:monospace;font-size:12px;color:#555;">${k.api_key}</td>
+                        <td style="padding:12px;text-align:center;">
+                            <span style="background:${k.status==='active'?'#28a745':'#dc3545'};color:white;padding:3px 10px;border-radius:12px;font-size:12px;">
+                                ${k.status}
+                            </span>
+                        </td>
+                        <td style="padding:12px;text-align:center;">${k.requests_today} / ${k.requests_limit}</td>
+                        <td style="padding:12px;text-align:center;">
+                            <button onclick="toggleApiKeyStatus(${k.id},'${k.status}')"
+                                style="background:${k.status==='active'?'#dc3545':'#28a745'};color:white;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;margin-right:5px;font-size:12px;">
+                                ${k.status==='active'?'Suspender':'Activar'}
+                            </button>
+                            <button onclick="deleteApiKey(${k.id},'${k.partner_name}')"
+                                style="background:#6c757d;color:white;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:12px;">
+                                Eliminar
+                            </button>
+                        </td>
+                    </tr>`).join('');
+
+            document.getElementById('api-keys-table-container').innerHTML = `
+                <table style="width:100%;border-collapse:collapse;background:white;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.1);">
+                    <thead style="background:#f8f9fa;">
+                        <tr>
+                            <th style="padding:12px;text-align:left;">Partner</th>
+                            <th style="padding:12px;text-align:left;">API Key</th>
+                            <th style="padding:12px;text-align:center;">Estado</th>
+                            <th style="padding:12px;text-align:center;">Requests hoy / límite</th>
+                            <th style="padding:12px;text-align:center;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        },
+        error: function() {
+            document.getElementById('api-keys-table-container').innerHTML = '<div class="error">Error de conexión</div>';
+        }
+    });
+}
+
+function showCreateApiKeyModal() {
+    jQuery('body').append(`
+        <div id="api-modal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:9999;">
+            <div style="background:white;padding:35px;border-radius:12px;width:440px;">
+                <h3 style="margin:0 0 20px 0;color:#0073aa;">🔑 Nueva API Key</h3>
+                <div style="margin-bottom:15px;">
+                    <label style="display:block;font-weight:600;margin-bottom:5px;">Nombre del Partner *</label>
+                    <input id="new-partner-name" type="text" placeholder="Ej: Civitatis"
+                        style="width:100%;padding:10px;border:2px solid #ddd;border-radius:6px;box-sizing:border-box;">
+                </div>
+                <div style="margin-bottom:20px;">
+                    <label style="display:block;font-weight:600;margin-bottom:5px;">Límite de requests diarios</label>
+                    <input id="new-request-limit" type="number" value="1000"
+                        style="width:100%;padding:10px;border:2px solid #ddd;border-radius:6px;box-sizing:border-box;">
+                </div>
+                <div style="display:flex;gap:10px;justify-content:flex-end;">
+                    <button onclick="jQuery('#api-modal').remove()"
+                        style="background:#6c757d;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;">
+                        Cancelar
+                    </button>
+                    <button onclick="createApiKey()"
+                        style="background:#0073aa;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:600;">
+                        Crear
+                    </button>
+                </div>
+            </div>
+        </div>
+    `);
+}
+
+function createApiKey() {
+    const name  = jQuery('#new-partner-name').val().trim();
+    const limit = jQuery('#new-request-limit').val();
+    if (!name) { alert('El nombre es obligatorio'); return; }
+
+    jQuery.ajax({
+        url: reservasAjax.ajax_url, type: 'POST',
+        data: { action: 'create_api_key', partner_name: name, request_limit: limit, nonce: reservasAjax.nonce },
+        success: function(r) {
+            jQuery('#api-modal').remove();
+            if (r.success) {
+                const d = r.data;
+                alert(`✅ API Key creada para ${d.partner_name}\n\nAPI Key:\n${d.api_key}\n\nAPI Secret:\n${d.api_secret}\n\n⚠️ GUARDA EL SECRET AHORA, no se volverá a mostrar.`);
+                loadApiKeysSection();
+            } else {
+                alert('Error: ' + r.data);
+            }
+        }
+    });
+}
+
+function toggleApiKeyStatus(id, currentStatus) {
+    const newStatus = currentStatus === 'active' ? 'suspended' : 'active';
+    if (!confirm(`¿${newStatus === 'active' ? 'Activar' : 'Suspender'} esta API key?`)) return;
+    jQuery.ajax({
+        url: reservasAjax.ajax_url, type: 'POST',
+        data: { action: 'toggle_api_key_status', key_id: id, status: newStatus, nonce: reservasAjax.nonce },
+        success: function(r) { if (r.success) loadApiKeysSection(); }
+    });
+}
+
+function deleteApiKey(id, name) {
+    if (!confirm(`¿Eliminar la API key de "${name}"?`)) return;
+    jQuery.ajax({
+        url: reservasAjax.ajax_url, type: 'POST',
+        data: { action: 'delete_api_key', key_id: id, nonce: reservasAjax.nonce },
+        success: function(r) { if (r.success) loadApiKeysSection(); }
+    });
+}
+
+function loadApiBookingsReport() {
+    const from = prompt('Fecha desde (YYYY-MM-DD):', new Date().toISOString().slice(0,7) + '-01');
+    if (!from) return;
+    const to = prompt('Fecha hasta (YYYY-MM-DD):', new Date().toISOString().slice(0,10));
+    if (!to) return;
+
+    jQuery.ajax({
+        url: reservasAjax.ajax_url, type: 'POST',
+        data: { action: 'get_api_bookings_report', date_from: from, date_to: to, nonce: reservasAjax.nonce },
+        success: function(r) {
+            if (!r.success) return;
+            const d = r.data;
+
+            let rows = d.bookings.length === 0
+                ? '<tr><td colspan="6" style="padding:20px;text-align:center;color:#666;">Sin reservas en este período</td></tr>'
+                : d.bookings.map(b => `
+                    <tr style="border-bottom:1px solid #f0f0f0;">
+                        <td style="padding:10px;">${b.partner_name}</td>
+                        <td style="padding:10px;font-family:monospace;font-size:12px;">${b.partner_booking_id || '-'}</td>
+                        <td style="padding:10px;">${b.fecha}</td>
+                        <td style="padding:10px;">${b.hora.slice(0,5)}</td>
+                        <td style="padding:10px;text-align:center;font-weight:600;">${b.seats}</td>
+                        <td style="padding:10px;font-size:12px;color:#666;">${b.created_at}</td>
+                    </tr>`).join('');
+
+            jQuery('#api-report-container').html(`
+                <div style="background:white;border-radius:8px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.1);">
+                    <h3 style="margin:0 0 15px 0;color:#0073aa;">📊 Reservas via API — ${from} a ${to}</h3>
+                    <div style="display:flex;gap:20px;margin-bottom:20px;">
+                        <div style="background:#e3f2fd;padding:15px 25px;border-radius:8px;text-align:center;">
+                            <div style="font-size:28px;font-weight:700;color:#0073aa;">${d.total_bookings}</div>
+                            <div style="font-size:13px;color:#666;">Transacciones</div>
+                        </div>
+                        <div style="background:#e8f5e9;padding:15px 25px;border-radius:8px;text-align:center;">
+                            <div style="font-size:28px;font-weight:700;color:#28a745;">${d.total_seats}</div>
+                            <div style="font-size:13px;color:#666;">Plazas vendidas</div>
+                        </div>
+                    </div>
+                    <table style="width:100%;border-collapse:collapse;">
+                        <thead style="background:#f8f9fa;">
+                            <tr>
+                                <th style="padding:10px;text-align:left;">Partner</th>
+                                <th style="padding:10px;text-align:left;">Ref. Partner</th>
+                                <th style="padding:10px;text-align:left;">Fecha servicio</th>
+                                <th style="padding:10px;text-align:left;">Hora</th>
+                                <th style="padding:10px;text-align:center;">Plazas</th>
+                                <th style="padding:10px;text-align:left;">Creada</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            `);
+        }
+    });
+}
+
 
 // Exponer funciones globalmente
 window.selectRetroDate = selectRetroDate;

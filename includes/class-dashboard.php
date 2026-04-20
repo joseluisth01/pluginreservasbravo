@@ -766,6 +766,7 @@ class ReservasDashboard
                                 <button class="action-btn" onclick="loadAdminReservaRapida()" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); border-left: 4px solid #155724;">⚡ Reserva Rápida</button>
                                 <button class="action-btn" onclick="loadAdminReservaRetroactiva()" style="background: linear-gradient(135deg, #fd7e14 0%, #e55a00 100%); border-left: 4px solid #c25500;">📅 Reserva Retroactiva</button>
                                 <button class="action-btn" onclick="loadAgenciesSection()">🏢 Gestionar Agencias</button>
+                                <button class="action-btn" onclick="loadApiKeysSection()" style="background: linear-gradient(135deg, #6f42c1 0%, #4a2d87 100%); border-left: 4px solid #3b1f6e;">🔑 API Partners</button>
                             </div>
                         </div>
                     <?php elseif ($is_admin): ?>
