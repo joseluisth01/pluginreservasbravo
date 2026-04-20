@@ -179,8 +179,8 @@ class SistemaReservas
         }
 
         if (class_exists('ReservasPublicAPI')) {
-    new ReservasPublicAPI();
-}
+            new ReservasPublicAPI();
+        }
 
         if (class_exists('ReservasAgencyServicesFrontend')) {
             new ReservasAgencyServicesFrontend();
@@ -480,7 +480,7 @@ class SistemaReservas
         id mediumint(9) NOT NULL AUTO_INCREMENT,
         fecha date NOT NULL,
         hora time NOT NULL,
-        hora_vuelta time NOT NULL, // Añade esta línea
+        hora_vuelta time NOT NULL, 
         plazas_totales int(11) NOT NULL,
         plazas_disponibles int(11) NOT NULL,
         plazas_bloqueadas int(11) DEFAULT 0,
@@ -698,8 +698,8 @@ class SistemaReservas
 
 
         // Tabla de API Keys
-$table_api_keys = $wpdb->prefix . 'reservas_api_keys';
-$sql_api_keys = "CREATE TABLE $table_api_keys (
+        $table_api_keys = $wpdb->prefix . 'reservas_api_keys';
+        $sql_api_keys = "CREATE TABLE $table_api_keys (
     id mediumint(9) NOT NULL AUTO_INCREMENT,
     partner_name varchar(100) NOT NULL,
     api_key varchar(64) NOT NULL UNIQUE,
@@ -712,11 +712,11 @@ $sql_api_keys = "CREATE TABLE $table_api_keys (
     PRIMARY KEY (id),
     KEY api_key (api_key)
 ) $charset_collate;";
-dbDelta($sql_api_keys);
+        dbDelta($sql_api_keys);
 
-// Tabla de reservas hechas por API (para reports)
-$table_api_bookings = $wpdb->prefix . 'reservas_api_bookings';
-$sql_api_bookings = "CREATE TABLE $table_api_bookings (
+        // Tabla de reservas hechas por API (para reports)
+        $table_api_bookings = $wpdb->prefix . 'reservas_api_bookings';
+        $sql_api_bookings = "CREATE TABLE $table_api_bookings (
     id mediumint(9) NOT NULL AUTO_INCREMENT,
     partner_id mediumint(9) NOT NULL,
     partner_name varchar(100) NOT NULL,
@@ -734,7 +734,7 @@ $sql_api_bookings = "CREATE TABLE $table_api_bookings (
     KEY fecha (fecha),
     KEY status (status)
 ) $charset_collate;";
-dbDelta($sql_api_bookings);
+        dbDelta($sql_api_bookings);
 
         // Crear usuario super admin inicial
         $this->create_super_admin();
@@ -895,15 +895,15 @@ dbDelta($sql_api_bookings);
         }
 
         // Crear tablas API si no existen
-$table_api_keys = $wpdb->prefix . 'reservas_api_keys';
-if ($wpdb->get_var("SHOW TABLES LIKE '$table_api_keys'") != $table_api_keys) {
-    // pegar aquí el mismo SQL de arriba
-}
+        $table_api_keys = $wpdb->prefix . 'reservas_api_keys';
+        if ($wpdb->get_var("SHOW TABLES LIKE '$table_api_keys'") != $table_api_keys) {
+            // pegar aquí el mismo SQL de arriba
+        }
 
-$table_api_bookings = $wpdb->prefix . 'reservas_api_bookings';
-if ($wpdb->get_var("SHOW TABLES LIKE '$table_api_bookings'") != $table_api_bookings) {
-    // pegar aquí el mismo SQL de arriba
-}
+        $table_api_bookings = $wpdb->prefix . 'reservas_api_bookings';
+        if ($wpdb->get_var("SHOW TABLES LIKE '$table_api_bookings'") != $table_api_bookings) {
+            // pegar aquí el mismo SQL de arriba
+        }
 
         // ✅ ACTUALIZAR CONFIGURACIÓN
 
@@ -1187,29 +1187,32 @@ function confirmacion_reserva_shortcode()
             border-radius: 20px;
         }
 
-.additional-services-section {
-    background-color: #00cc00;
-    padding: 50px 0;
-    text-align: center;
-    box-shadow: 0px 15px 20px -10px rgba(0, 0, 0, 0.2); /* solo abajo */
-    backdrop-filter: blur(3px);
-    margin-bottom: 50px;
+        .additional-services-section {
+            background-color: #00cc00;
+            padding: 50px 0;
+            text-align: center;
+            box-shadow: 0px 15px 20px -10px rgba(0, 0, 0, 0.2);
+            /* solo abajo */
+            backdrop-filter: blur(3px);
+            margin-bottom: 50px;
 
-    animation: parpadeo 0.8s infinite;
-}
+            animation: parpadeo 0.8s infinite;
+        }
 
-/* SOLO cambia el color, nada de sombras */
-@keyframes parpadeo {
-    0% {
-        background-color: #00cc00;
-    }
-    50% {
-        background-color: #27af0f;
-    }
-    100% {
-        background-color: #00cc00;
-    }
-}
+        /* SOLO cambia el color, nada de sombras */
+        @keyframes parpadeo {
+            0% {
+                background-color: #00cc00;
+            }
+
+            50% {
+                background-color: #27af0f;
+            }
+
+            100% {
+                background-color: #00cc00;
+            }
+        }
 
         .service-card-destacado {
             max-width: 100%;
@@ -3685,17 +3688,28 @@ add_action('wp_ajax_toggle_api_key_status',   'ajax_toggle_api_key_status');
 add_action('wp_ajax_delete_api_key',          'ajax_delete_api_key');
 add_action('wp_ajax_get_api_bookings_report', 'ajax_get_api_bookings_report');
 
-function ajax_get_api_keys_list() {
+function ajax_get_api_keys_list()
+{
     if (!session_id()) session_start();
-    
-    // Verificar nonce - acepta tanto POST como posible GET
+
+    error_log('=== API KEYS LIST CALLED ===');
+    error_log('POST: ' . print_r($_POST, true));
+    error_log('SESSION: ' . print_r($_SESSION, true));
+
     $nonce = $_POST['nonce'] ?? $_REQUEST['nonce'] ?? '';
+    $nonce_valid = wp_verify_nonce($nonce, 'reservas_nonce');
+    error_log('Nonce recibido: ' . $nonce . ' | Válido: ' . ($nonce_valid ? 'SÍ' : 'NO'));
+
+    if (!$nonce_valid) {
+        wp_send_json_error('Error de seguridad - nonce inválido');
+        return;
+    }
     if (!wp_verify_nonce($nonce, 'reservas_nonce')) {
         error_log('API Keys: Nonce falló - recibido: ' . $nonce);
         wp_send_json_error('Error de seguridad - nonce inválido');
         return;
     }
-    
+
     if (!isset($_SESSION['reservas_user']) || $_SESSION['reservas_user']['role'] !== 'super_admin') {
         wp_send_json_error('Sin permisos');
         return;
@@ -3709,15 +3723,16 @@ function ajax_get_api_keys_list() {
     wp_send_json_success($keys);
 }
 
-function ajax_create_api_key() {
+function ajax_create_api_key()
+{
     if (!session_id()) session_start();
-    
+
     $nonce = $_POST['nonce'] ?? '';
     if (!wp_verify_nonce($nonce, 'reservas_nonce')) {
         wp_send_json_error('Error de seguridad');
         return;
     }
-    
+
     if (!isset($_SESSION['reservas_user']) || $_SESSION['reservas_user']['role'] !== 'super_admin') {
         wp_send_json_error('Sin permisos');
         return;
@@ -3758,15 +3773,16 @@ function ajax_create_api_key() {
     ));
 }
 
-function ajax_toggle_api_key_status() {
+function ajax_toggle_api_key_status()
+{
     if (!session_id()) session_start();
-    
+
     $nonce = $_POST['nonce'] ?? '';
     if (!wp_verify_nonce($nonce, 'reservas_nonce')) {
         wp_send_json_error('Error de seguridad');
         return;
     }
-    
+
     if (!isset($_SESSION['reservas_user']) || $_SESSION['reservas_user']['role'] !== 'super_admin') {
         wp_send_json_error('Sin permisos');
         return;
@@ -3775,7 +3791,7 @@ function ajax_toggle_api_key_status() {
     global $wpdb;
     $id     = intval($_POST['key_id'] ?? 0);
     $status = ($_POST['status'] ?? '') === 'active' ? 'active' : 'suspended';
-    
+
     $wpdb->update(
         $wpdb->prefix . 'reservas_api_keys',
         array('status' => $status),
@@ -3784,15 +3800,16 @@ function ajax_toggle_api_key_status() {
     wp_send_json_success();
 }
 
-function ajax_delete_api_key() {
+function ajax_delete_api_key()
+{
     if (!session_id()) session_start();
-    
+
     $nonce = $_POST['nonce'] ?? '';
     if (!wp_verify_nonce($nonce, 'reservas_nonce')) {
         wp_send_json_error('Error de seguridad');
         return;
     }
-    
+
     if (!isset($_SESSION['reservas_user']) || $_SESSION['reservas_user']['role'] !== 'super_admin') {
         wp_send_json_error('Sin permisos');
         return;
@@ -3806,15 +3823,16 @@ function ajax_delete_api_key() {
     wp_send_json_success();
 }
 
-function ajax_get_api_bookings_report() {
+function ajax_get_api_bookings_report()
+{
     if (!session_id()) session_start();
-    
+
     $nonce = $_POST['nonce'] ?? '';
     if (!wp_verify_nonce($nonce, 'reservas_nonce')) {
         wp_send_json_error('Error de seguridad');
         return;
     }
-    
+
     if (!isset($_SESSION['reservas_user']) || !in_array($_SESSION['reservas_user']['role'], array('super_admin', 'admin'))) {
         wp_send_json_error('Sin permisos');
         return;
@@ -3827,7 +3845,8 @@ function ajax_get_api_bookings_report() {
 
     $bookings = $wpdb->get_results($wpdb->prepare(
         "SELECT * FROM $table WHERE fecha BETWEEN %s AND %s ORDER BY created_at DESC",
-        $from, $to
+        $from,
+        $to
     ));
     $total_seats = array_sum(array_column($bookings, 'seats'));
 
@@ -3895,10 +3914,11 @@ add_action('send_delayed_email_alert', function ($email, $localizador) {
 add_action('send_delayed_admin_notification', array('ReservasEmailService', 'send_admin_notification_delayed'), 10, 1);
 
 add_action('wp_ajax_force_create_api_tables', 'force_create_api_tables_now');
-function force_create_api_tables_now() {
+function force_create_api_tables_now()
+{
     global $wpdb;
     $charset_collate = $wpdb->get_charset_collate();
-    
+
     $table_keys = $wpdb->prefix . 'reservas_api_keys';
     $sql1 = "CREATE TABLE IF NOT EXISTS $table_keys (
         id mediumint(9) NOT NULL AUTO_INCREMENT,
@@ -3913,7 +3933,7 @@ function force_create_api_tables_now() {
         PRIMARY KEY (id),
         UNIQUE KEY api_key (api_key)
     ) $charset_collate;";
-    
+
     $table_bookings = $wpdb->prefix . 'reservas_api_bookings';
     $sql2 = "CREATE TABLE IF NOT EXISTS $table_bookings (
         id mediumint(9) NOT NULL AUTO_INCREMENT,
@@ -3931,14 +3951,14 @@ function force_create_api_tables_now() {
         KEY partner_id (partner_id),
         KEY fecha (fecha)
     ) $charset_collate;";
-    
+
     require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
     dbDelta($sql1);
     dbDelta($sql2);
-    
+
     $keys_exist = $wpdb->get_var("SHOW TABLES LIKE '$table_keys'") == $table_keys;
     $bookings_exist = $wpdb->get_var("SHOW TABLES LIKE '$table_bookings'") == $table_bookings;
-    
+
     wp_send_json_success(array(
         'api_keys_table' => $keys_exist ? '✅ Existe' : '❌ No existe',
         'api_bookings_table' => $bookings_exist ? '✅ Existe' : '❌ No existe',
