@@ -1187,14 +1187,29 @@ function confirmacion_reserva_shortcode()
             border-radius: 20px;
         }
 
-        .additional-services-section {
-            background-color: #871727;
-            padding: 50px 0px 50px 0px;
-            text-align: center;
-            box-shadow: 0px 0px 15px 0px rgba(46, 45, 44, .2);
-            backdrop-filter: blur(3px);
-            margin-bottom: 50px;
-        }
+.additional-services-section {
+    background-color: #00cc00;
+    padding: 50px 0;
+    text-align: center;
+    box-shadow: 0px 15px 20px -10px rgba(0, 0, 0, 0.2); /* solo abajo */
+    backdrop-filter: blur(3px);
+    margin-bottom: 50px;
+
+    animation: parpadeo 0.8s infinite;
+}
+
+/* SOLO cambia el color, nada de sombras */
+@keyframes parpadeo {
+    0% {
+        background-color: #00cc00;
+    }
+    50% {
+        background-color: #27af0f;
+    }
+    100% {
+        background-color: #00cc00;
+    }
+}
 
         .service-card-destacado {
             max-width: 100%;
@@ -1767,7 +1782,7 @@ function confirmacion_reserva_shortcode()
 
             let servicesHtml = `
         <div class="additional-services-section">
-            <h2 class="horarios-titulo" style="color:white">Reserva aquí tu visita guiada a Medina Azahara</h2>
+            <h2 class="horarios-titulo" style="color:white">¿Quieres también reservar una Visita Guiada?</h2>
             <p class="services-subtitle" style="color:white !important; margin-bottom:30px;">
                 Completa la experiencia con un tour guiado por expertos y descubre cada secreto de Medina Azahara. Elige la opción que más se adapte a ti.
             </p>
@@ -3671,8 +3686,20 @@ add_action('wp_ajax_delete_api_key',          'ajax_delete_api_key');
 add_action('wp_ajax_get_api_bookings_report', 'ajax_get_api_bookings_report');
 
 function ajax_get_api_keys_list() {
-    if (!wp_verify_nonce($_POST['nonce'], 'reservas_nonce')) wp_die('Seguridad');
-    if ($_SESSION['reservas_user']['role'] !== 'super_admin') wp_send_json_error('Sin permisos');
+    if (!session_id()) session_start();
+    
+    // Verificar nonce - acepta tanto POST como posible GET
+    $nonce = $_POST['nonce'] ?? $_REQUEST['nonce'] ?? '';
+    if (!wp_verify_nonce($nonce, 'reservas_nonce')) {
+        error_log('API Keys: Nonce falló - recibido: ' . $nonce);
+        wp_send_json_error('Error de seguridad - nonce inválido');
+        return;
+    }
+    
+    if (!isset($_SESSION['reservas_user']) || $_SESSION['reservas_user']['role'] !== 'super_admin') {
+        wp_send_json_error('Sin permisos');
+        return;
+    }
 
     global $wpdb;
     $keys = $wpdb->get_results(
@@ -3683,19 +3710,32 @@ function ajax_get_api_keys_list() {
 }
 
 function ajax_create_api_key() {
-    if (!wp_verify_nonce($_POST['nonce'], 'reservas_nonce')) wp_die('Seguridad');
-    if ($_SESSION['reservas_user']['role'] !== 'super_admin') wp_send_json_error('Sin permisos');
+    if (!session_id()) session_start();
+    
+    $nonce = $_POST['nonce'] ?? '';
+    if (!wp_verify_nonce($nonce, 'reservas_nonce')) {
+        wp_send_json_error('Error de seguridad');
+        return;
+    }
+    
+    if (!isset($_SESSION['reservas_user']) || $_SESSION['reservas_user']['role'] !== 'super_admin') {
+        wp_send_json_error('Sin permisos');
+        return;
+    }
 
     global $wpdb;
-    $name  = sanitize_text_field($_POST['partner_name']);
+    $name  = sanitize_text_field($_POST['partner_name'] ?? '');
     $limit = max(10, intval($_POST['request_limit'] ?? 1000));
 
-    if (empty($name)) wp_send_json_error('El nombre es obligatorio');
+    if (empty($name)) {
+        wp_send_json_error('El nombre es obligatorio');
+        return;
+    }
 
     $api_key    = 'RES_' . strtoupper(substr(md5(uniqid(rand(), true)), 0, 20));
     $api_secret = bin2hex(random_bytes(20));
 
-    $wpdb->insert(
+    $result = $wpdb->insert(
         $wpdb->prefix . 'reservas_api_keys',
         array(
             'partner_name'   => $name,
@@ -3706,6 +3746,11 @@ function ajax_create_api_key() {
         )
     );
 
+    if (!$result) {
+        wp_send_json_error('Error creando la API key: ' . $wpdb->last_error);
+        return;
+    }
+
     wp_send_json_success(array(
         'partner_name' => $name,
         'api_key'      => $api_key,
@@ -3714,46 +3759,81 @@ function ajax_create_api_key() {
 }
 
 function ajax_toggle_api_key_status() {
-    if (!wp_verify_nonce($_POST['nonce'], 'reservas_nonce')) wp_die('Seguridad');
-    if ($_SESSION['reservas_user']['role'] !== 'super_admin') wp_send_json_error('Sin permisos');
+    if (!session_id()) session_start();
+    
+    $nonce = $_POST['nonce'] ?? '';
+    if (!wp_verify_nonce($nonce, 'reservas_nonce')) {
+        wp_send_json_error('Error de seguridad');
+        return;
+    }
+    
+    if (!isset($_SESSION['reservas_user']) || $_SESSION['reservas_user']['role'] !== 'super_admin') {
+        wp_send_json_error('Sin permisos');
+        return;
+    }
 
     global $wpdb;
-    $id     = intval($_POST['key_id']);
-    $status = $_POST['status'] === 'active' ? 'active' : 'suspended';
-    $wpdb->update($wpdb->prefix . 'reservas_api_keys', array('status' => $status), array('id' => $id));
+    $id     = intval($_POST['key_id'] ?? 0);
+    $status = ($_POST['status'] ?? '') === 'active' ? 'active' : 'suspended';
+    
+    $wpdb->update(
+        $wpdb->prefix . 'reservas_api_keys',
+        array('status' => $status),
+        array('id' => $id)
+    );
     wp_send_json_success();
 }
 
 function ajax_delete_api_key() {
-    if (!wp_verify_nonce($_POST['nonce'], 'reservas_nonce')) wp_die('Seguridad');
-    if ($_SESSION['reservas_user']['role'] !== 'super_admin') wp_send_json_error('Sin permisos');
+    if (!session_id()) session_start();
+    
+    $nonce = $_POST['nonce'] ?? '';
+    if (!wp_verify_nonce($nonce, 'reservas_nonce')) {
+        wp_send_json_error('Error de seguridad');
+        return;
+    }
+    
+    if (!isset($_SESSION['reservas_user']) || $_SESSION['reservas_user']['role'] !== 'super_admin') {
+        wp_send_json_error('Sin permisos');
+        return;
+    }
 
     global $wpdb;
-    $wpdb->delete($wpdb->prefix . 'reservas_api_keys', array('id' => intval($_POST['key_id'])));
+    $wpdb->delete(
+        $wpdb->prefix . 'reservas_api_keys',
+        array('id' => intval($_POST['key_id'] ?? 0))
+    );
     wp_send_json_success();
 }
 
 function ajax_get_api_bookings_report() {
-    if (!wp_verify_nonce($_POST['nonce'], 'reservas_nonce')) wp_die('Seguridad');
-    if (!in_array($_SESSION['reservas_user']['role'], array('super_admin', 'admin'))) {
+    if (!session_id()) session_start();
+    
+    $nonce = $_POST['nonce'] ?? '';
+    if (!wp_verify_nonce($nonce, 'reservas_nonce')) {
+        wp_send_json_error('Error de seguridad');
+        return;
+    }
+    
+    if (!isset($_SESSION['reservas_user']) || !in_array($_SESSION['reservas_user']['role'], array('super_admin', 'admin'))) {
         wp_send_json_error('Sin permisos');
+        return;
     }
 
     global $wpdb;
-    $table   = $wpdb->prefix . 'reservas_api_bookings';
-    $partner = sanitize_text_field($_POST['partner'] ?? '');
-    $from    = sanitize_text_field($_POST['date_from'] ?? date('Y-m-01'));
-    $to      = sanitize_text_field($_POST['date_to']   ?? date('Y-m-d'));
+    $table = $wpdb->prefix . 'reservas_api_bookings';
+    $from  = sanitize_text_field($_POST['date_from'] ?? date('Y-m-01'));
+    $to    = sanitize_text_field($_POST['date_to']   ?? date('Y-m-d'));
 
-    $where = "WHERE fecha BETWEEN '$from' AND '$to'";
-    if ($partner) $where .= $wpdb->prepare(" AND partner_name = %s", $partner);
-
-    $bookings = $wpdb->get_results("SELECT * FROM $table $where ORDER BY created_at DESC");
+    $bookings = $wpdb->get_results($wpdb->prepare(
+        "SELECT * FROM $table WHERE fecha BETWEEN %s AND %s ORDER BY created_at DESC",
+        $from, $to
+    ));
     $total_seats = array_sum(array_column($bookings, 'seats'));
 
     wp_send_json_success(array(
-        'bookings'     => $bookings,
-        'total_seats'  => $total_seats,
+        'bookings'       => $bookings,
+        'total_seats'    => $total_seats,
         'total_bookings' => count($bookings),
     ));
 }
@@ -3814,7 +3894,56 @@ add_action('send_delayed_email_alert', function ($email, $localizador) {
 // ✅ Hook para notificaciones de admin retrasadas
 add_action('send_delayed_admin_notification', array('ReservasEmailService', 'send_admin_notification_delayed'), 10, 1);
 
-
+add_action('wp_ajax_force_create_api_tables', 'force_create_api_tables_now');
+function force_create_api_tables_now() {
+    global $wpdb;
+    $charset_collate = $wpdb->get_charset_collate();
+    
+    $table_keys = $wpdb->prefix . 'reservas_api_keys';
+    $sql1 = "CREATE TABLE IF NOT EXISTS $table_keys (
+        id mediumint(9) NOT NULL AUTO_INCREMENT,
+        partner_name varchar(100) NOT NULL,
+        api_key varchar(64) NOT NULL,
+        api_secret varchar(64) NOT NULL,
+        status enum('active','inactive','suspended') DEFAULT 'active',
+        requests_today int(11) DEFAULT 0,
+        requests_limit int(11) DEFAULT 1000,
+        last_request datetime NULL,
+        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY api_key (api_key)
+    ) $charset_collate;";
+    
+    $table_bookings = $wpdb->prefix . 'reservas_api_bookings';
+    $sql2 = "CREATE TABLE IF NOT EXISTS $table_bookings (
+        id mediumint(9) NOT NULL AUTO_INCREMENT,
+        partner_id mediumint(9) NOT NULL,
+        partner_name varchar(100) NOT NULL,
+        partner_booking_id varchar(100) DEFAULT '',
+        service_id mediumint(9) NOT NULL,
+        fecha date NOT NULL,
+        hora time NOT NULL,
+        seats int(11) NOT NULL,
+        customer_name varchar(200) DEFAULT '',
+        status enum('confirmed','cancelled') DEFAULT 'confirmed',
+        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY partner_id (partner_id),
+        KEY fecha (fecha)
+    ) $charset_collate;";
+    
+    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+    dbDelta($sql1);
+    dbDelta($sql2);
+    
+    $keys_exist = $wpdb->get_var("SHOW TABLES LIKE '$table_keys'") == $table_keys;
+    $bookings_exist = $wpdb->get_var("SHOW TABLES LIKE '$table_bookings'") == $table_bookings;
+    
+    wp_send_json_success(array(
+        'api_keys_table' => $keys_exist ? '✅ Existe' : '❌ No existe',
+        'api_bookings_table' => $bookings_exist ? '✅ Existe' : '❌ No existe',
+    ));
+}
 
 
 
