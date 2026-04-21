@@ -3688,33 +3688,19 @@ add_action('wp_ajax_toggle_api_key_status',   'ajax_toggle_api_key_status');
 add_action('wp_ajax_delete_api_key',          'ajax_delete_api_key');
 add_action('wp_ajax_get_api_bookings_report', 'ajax_get_api_bookings_report');
 
-function ajax_get_api_keys_list()
-{
+function ajax_get_api_keys_list() {
     if (!session_id()) session_start();
-
-    error_log('=== API KEYS LIST CALLED ===');
-    error_log('POST: ' . print_r($_POST, true));
-    error_log('SESSION: ' . print_r($_SESSION, true));
-
-    $nonce = $_POST['nonce'] ?? $_REQUEST['nonce'] ?? '';
-    $nonce_valid = wp_verify_nonce($nonce, 'reservas_nonce');
-    error_log('Nonce recibido: ' . $nonce . ' | Válido: ' . ($nonce_valid ? 'SÍ' : 'NO'));
-
-    if (!$nonce_valid) {
-        wp_send_json_error('Error de seguridad - nonce inválido');
+    
+    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'reservas_nonce')) {
+        wp_send_json_error('Error de seguridad');
         return;
     }
-    if (!wp_verify_nonce($nonce, 'reservas_nonce')) {
-        error_log('API Keys: Nonce falló - recibido: ' . $nonce);
-        wp_send_json_error('Error de seguridad - nonce inválido');
-        return;
-    }
-
+    
     if (!isset($_SESSION['reservas_user']) || $_SESSION['reservas_user']['role'] !== 'super_admin') {
         wp_send_json_error('Sin permisos');
         return;
     }
-
+    
     global $wpdb;
     $keys = $wpdb->get_results(
         "SELECT id, partner_name, api_key, status, requests_today, requests_limit, last_request
@@ -3723,33 +3709,31 @@ function ajax_get_api_keys_list()
     wp_send_json_success($keys);
 }
 
-function ajax_create_api_key()
-{
+function ajax_create_api_key() {
     if (!session_id()) session_start();
-
-    $nonce = $_POST['nonce'] ?? '';
-    if (!wp_verify_nonce($nonce, 'reservas_nonce')) {
+    
+    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'reservas_nonce')) {
         wp_send_json_error('Error de seguridad');
         return;
     }
-
+    
     if (!isset($_SESSION['reservas_user']) || $_SESSION['reservas_user']['role'] !== 'super_admin') {
         wp_send_json_error('Sin permisos');
         return;
     }
-
+    
     global $wpdb;
     $name  = sanitize_text_field($_POST['partner_name'] ?? '');
     $limit = max(10, intval($_POST['request_limit'] ?? 1000));
-
+    
     if (empty($name)) {
         wp_send_json_error('El nombre es obligatorio');
         return;
     }
-
+    
     $api_key    = 'RES_' . strtoupper(substr(md5(uniqid(rand(), true)), 0, 20));
     $api_secret = bin2hex(random_bytes(20));
-
+    
     $result = $wpdb->insert(
         $wpdb->prefix . 'reservas_api_keys',
         array(
@@ -3760,12 +3744,12 @@ function ajax_create_api_key()
             'status'         => 'active',
         )
     );
-
+    
     if (!$result) {
         wp_send_json_error('Error creando la API key: ' . $wpdb->last_error);
         return;
     }
-
+    
     wp_send_json_success(array(
         'partner_name' => $name,
         'api_key'      => $api_key,
@@ -3773,83 +3757,76 @@ function ajax_create_api_key()
     ));
 }
 
-function ajax_toggle_api_key_status()
-{
+function ajax_toggle_api_key_status() {
     if (!session_id()) session_start();
-
-    $nonce = $_POST['nonce'] ?? '';
-    if (!wp_verify_nonce($nonce, 'reservas_nonce')) {
+    
+    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'reservas_nonce')) {
         wp_send_json_error('Error de seguridad');
         return;
     }
-
+    
     if (!isset($_SESSION['reservas_user']) || $_SESSION['reservas_user']['role'] !== 'super_admin') {
         wp_send_json_error('Sin permisos');
         return;
     }
-
+    
     global $wpdb;
     $id     = intval($_POST['key_id'] ?? 0);
     $status = ($_POST['status'] ?? '') === 'active' ? 'active' : 'suspended';
-
+    
     $wpdb->update(
         $wpdb->prefix . 'reservas_api_keys',
         array('status' => $status),
         array('id' => $id)
     );
-    wp_send_json_success();
+    wp_send_json_success('Estado actualizado');
 }
 
-function ajax_delete_api_key()
-{
+function ajax_delete_api_key() {
     if (!session_id()) session_start();
-
-    $nonce = $_POST['nonce'] ?? '';
-    if (!wp_verify_nonce($nonce, 'reservas_nonce')) {
+    
+    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'reservas_nonce')) {
         wp_send_json_error('Error de seguridad');
         return;
     }
-
+    
     if (!isset($_SESSION['reservas_user']) || $_SESSION['reservas_user']['role'] !== 'super_admin') {
         wp_send_json_error('Sin permisos');
         return;
     }
-
+    
     global $wpdb;
     $wpdb->delete(
         $wpdb->prefix . 'reservas_api_keys',
         array('id' => intval($_POST['key_id'] ?? 0))
     );
-    wp_send_json_success();
+    wp_send_json_success('API key eliminada');
 }
 
-function ajax_get_api_bookings_report()
-{
+function ajax_get_api_bookings_report() {
     if (!session_id()) session_start();
-
-    $nonce = $_POST['nonce'] ?? '';
-    if (!wp_verify_nonce($nonce, 'reservas_nonce')) {
+    
+    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'reservas_nonce')) {
         wp_send_json_error('Error de seguridad');
         return;
     }
-
+    
     if (!isset($_SESSION['reservas_user']) || !in_array($_SESSION['reservas_user']['role'], array('super_admin', 'admin'))) {
         wp_send_json_error('Sin permisos');
         return;
     }
-
+    
     global $wpdb;
     $table = $wpdb->prefix . 'reservas_api_bookings';
     $from  = sanitize_text_field($_POST['date_from'] ?? date('Y-m-01'));
     $to    = sanitize_text_field($_POST['date_to']   ?? date('Y-m-d'));
-
+    
     $bookings = $wpdb->get_results($wpdb->prepare(
         "SELECT * FROM $table WHERE fecha BETWEEN %s AND %s ORDER BY created_at DESC",
-        $from,
-        $to
+        $from, $to
     ));
     $total_seats = array_sum(array_column($bookings, 'seats'));
-
+    
     wp_send_json_success(array(
         'bookings'       => $bookings,
         'total_seats'    => $total_seats,
@@ -3892,6 +3869,8 @@ function force_update_services_table_manual()
 
     exit;
 }
+
+
 
 
 // ✅ Programar envío de notificaciones agrupadas
@@ -3964,6 +3943,15 @@ function force_create_api_tables_now()
         'api_bookings_table' => $bookings_exist ? '✅ Existe' : '❌ No existe',
     ));
 }
+
+add_action('wp_ajax_test_api_section', function() {
+    if (!session_id()) session_start();
+    wp_send_json_success(array(
+        'session_ok' => isset($_SESSION['reservas_user']),
+        'role' => $_SESSION['reservas_user']['role'] ?? 'none',
+        'nonce_ok' => wp_verify_nonce($_POST['nonce'] ?? '', 'reservas_nonce')
+    ));
+});
 
 
 

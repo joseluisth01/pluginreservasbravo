@@ -17185,6 +17185,15 @@ function loadApiKeysSection() {
     // Poner la URL base
     document.getElementById('api-base-url').textContent = window.location.origin + '/wp-json/reservas/v1/';
 
+    // TEST TEMPORAL - borrar después
+jQuery.ajax({
+    url: reservasAjax.ajax_url,
+    type: 'POST',
+    data: { action: 'test_api_section', nonce: reservasAjax.nonce },
+    success: function(r) { console.log('TEST RESULT:', r); },
+    error: function(xhr) { console.log('TEST ERROR:', xhr.status, xhr.responseText); }
+});
+
     // Cargar la tabla de keys via AJAX
     jQuery.ajax({
         url: reservasAjax.ajax_url,
