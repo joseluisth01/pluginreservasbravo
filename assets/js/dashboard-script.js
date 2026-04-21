@@ -17142,6 +17142,13 @@ function generateVisitasPDFWithSchedules() {
 }
 
 
+
+
+
+
+
+
+
 function loadApiKeysSection() {
     document.body.innerHTML = `
         <div style="padding:20px;max-width:950px;margin:0 auto;">
@@ -17149,7 +17156,6 @@ function loadApiKeysSection() {
                 <h1 style="margin:0;color:#23282d;">🔑 API para Partners Externos</h1>
                 <button class="btn-secondary" onclick="goBackToDashboard()">← Volver al Dashboard</button>
             </div>
-
             <div style="background:#e3f2fd;padding:18px;border-radius:8px;margin-bottom:20px;border-left:4px solid #2196f3;font-size:14px;">
                 <strong>📡 Base URL:</strong>
                 <code style="background:#fff;padding:4px 10px;border-radius:4px;margin-left:8px;" id="api-base-url"></code>
@@ -17162,7 +17168,6 @@ function loadApiKeysSection() {
                 <strong>Cabeceras requeridas:</strong>
                 <code style="margin-left:8px;">X-API-Key</code> y <code>X-API-Secret</code>
             </div>
-
             <div style="display:flex;gap:10px;margin-bottom:20px;">
                 <button onclick="showCreateApiKeyModal()"
                     style="background:#28a745;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:600;">
@@ -17173,11 +17178,9 @@ function loadApiKeysSection() {
                     📊 Ver Reservas por API
                 </button>
             </div>
-
             <div id="api-keys-table-container">
                 <div class="loading">Cargando API keys...</div>
             </div>
-
             <div id="api-report-container" style="margin-top:30px;"></div>
         </div>
     `;
@@ -17187,21 +17190,14 @@ function loadApiKeysSection() {
     jQuery.ajax({
         url: reservasAjax.ajax_url,
         type: 'POST',
-        data: { 
-            action: 'get_api_keys_list', 
-            nonce: reservasAjax.nonce 
-        },
+        data: { action: 'reservas_get_api_keys' },
         success: function(r) {
-            console.log('API Keys response:', r);
-            
             if (!r.success) {
-                document.getElementById('api-keys-table-container').innerHTML = 
+                document.getElementById('api-keys-table-container').innerHTML =
                     '<div class="error">Error cargando API keys: ' + r.data + '</div>';
                 return;
             }
-
             const keys = r.data;
-
             let rows = keys.length === 0
                 ? '<tr><td colspan="5" style="padding:25px;text-align:center;color:#666;">No hay API keys creadas todavía</td></tr>'
                 : keys.map(k => `
@@ -17241,10 +17237,9 @@ function loadApiKeysSection() {
                 </table>
             `;
         },
-        error: function(xhr, status, error) {
-            console.error('Error cargando API keys:', xhr.status, xhr.responseText);
-            document.getElementById('api-keys-table-container').innerHTML = 
-                '<div class="error">Error de conexión (' + xhr.status + '). Comprueba la consola para más detalles.</div>';
+        error: function(xhr) {
+            document.getElementById('api-keys-table-container').innerHTML =
+                '<div class="error">Error de conexión (' + xhr.status + ').</div>';
         }
     });
 }
@@ -17285,8 +17280,9 @@ function createApiKey() {
     if (!name) { alert('El nombre es obligatorio'); return; }
 
     jQuery.ajax({
-        url: reservasAjax.ajax_url, type: 'POST',
-        data: { action: 'create_api_key', partner_name: name, request_limit: limit, nonce: reservasAjax.nonce },
+        url: reservasAjax.ajax_url,
+        type: 'POST',
+        data: { action: 'reservas_create_api_key', partner_name: name, request_limit: limit },
         success: function(r) {
             jQuery('#api-modal').remove();
             if (r.success) {
@@ -17304,8 +17300,9 @@ function toggleApiKeyStatus(id, currentStatus) {
     const newStatus = currentStatus === 'active' ? 'suspended' : 'active';
     if (!confirm(`¿${newStatus === 'active' ? 'Activar' : 'Suspender'} esta API key?`)) return;
     jQuery.ajax({
-        url: reservasAjax.ajax_url, type: 'POST',
-        data: { action: 'toggle_api_key_status', key_id: id, status: newStatus, nonce: reservasAjax.nonce },
+        url: reservasAjax.ajax_url,
+        type: 'POST',
+        data: { action: 'reservas_toggle_api_key', key_id: id, status: newStatus },
         success: function(r) { if (r.success) loadApiKeysSection(); }
     });
 }
@@ -17313,8 +17310,9 @@ function toggleApiKeyStatus(id, currentStatus) {
 function deleteApiKey(id, name) {
     if (!confirm(`¿Eliminar la API key de "${name}"?`)) return;
     jQuery.ajax({
-        url: reservasAjax.ajax_url, type: 'POST',
-        data: { action: 'delete_api_key', key_id: id, nonce: reservasAjax.nonce },
+        url: reservasAjax.ajax_url,
+        type: 'POST',
+        data: { action: 'reservas_delete_api_key', key_id: id },
         success: function(r) { if (r.success) loadApiKeysSection(); }
     });
 }
@@ -17326,12 +17324,12 @@ function loadApiBookingsReport() {
     if (!to) return;
 
     jQuery.ajax({
-        url: reservasAjax.ajax_url, type: 'POST',
-        data: { action: 'get_api_bookings_report', date_from: from, date_to: to, nonce: reservasAjax.nonce },
+        url: reservasAjax.ajax_url,
+        type: 'POST',
+        data: { action: 'reservas_api_bookings_report', date_from: from, date_to: to },
         success: function(r) {
             if (!r.success) return;
             const d = r.data;
-
             let rows = d.bookings.length === 0
                 ? '<tr><td colspan="6" style="padding:20px;text-align:center;color:#666;">Sin reservas en este período</td></tr>'
                 : d.bookings.map(b => `
