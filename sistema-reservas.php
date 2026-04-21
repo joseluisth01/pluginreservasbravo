@@ -3688,36 +3688,60 @@ add_action('wp_ajax_toggle_api_key_status',   'ajax_toggle_api_key_status');
 add_action('wp_ajax_delete_api_key',          'ajax_delete_api_key');
 add_action('wp_ajax_get_api_bookings_report', 'ajax_get_api_bookings_report');
 
+// En sistema-reservas.php, reemplaza estas 5 funciones:
+
 function ajax_get_api_keys_list() {
-    if (!session_id()) session_start();
+    error_log('=== AJAX GET API KEYS LLAMADO ===');
+    error_log('POST nonce: ' . ($_POST['nonce'] ?? 'NO NONCE'));
+    error_log('Verify result: ' . (wp_verify_nonce($_POST['nonce'] ?? '', 'reservas_nonce') ? 'OK' : 'FAIL'));
     
-    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'reservas_nonce')) {
+    if (!session_id()) session_start();
+
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'reservas_nonce')) {
+        error_log('❌ Nonce fallido');
         wp_send_json_error('Error de seguridad');
         return;
     }
-    
+
     if (!isset($_SESSION['reservas_user']) || $_SESSION['reservas_user']['role'] !== 'super_admin') {
+        error_log('❌ Sin permisos - rol: ' . ($_SESSION['reservas_user']['role'] ?? 'no session'));
         wp_send_json_error('Sin permisos');
         return;
     }
-    
+
     global $wpdb;
+    $table = $wpdb->prefix . 'reservas_api_keys';
+
+    $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table'") == $table;
+    if (!$table_exists) {
+        error_log('❌ Tabla no existe');
+        wp_send_json_error('La tabla de API keys no existe. Desactiva y reactiva el plugin.');
+        return;
+    }
+
     $keys = $wpdb->get_results(
         "SELECT id, partner_name, api_key, status, requests_today, requests_limit, last_request
-         FROM {$wpdb->prefix}reservas_api_keys ORDER BY id DESC"
+         FROM $table ORDER BY id DESC"
     );
-    wp_send_json_success($keys);
+
+    error_log('✅ Keys encontradas: ' . count($keys));
+    wp_send_json_success($keys ? $keys : array());
 }
 
 function ajax_create_api_key() {
     if (!session_id()) session_start();
     
-    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'reservas_nonce')) {
+    if (!isset($_SESSION['reservas_user'])) {
+        wp_send_json_error('Sesión expirada. Recarga la página e inicia sesión nuevamente.');
+        return;
+    }
+    
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'reservas_nonce')) {
         wp_send_json_error('Error de seguridad');
         return;
     }
     
-    if (!isset($_SESSION['reservas_user']) || $_SESSION['reservas_user']['role'] !== 'super_admin') {
+    if ($_SESSION['reservas_user']['role'] !== 'super_admin') {
         wp_send_json_error('Sin permisos');
         return;
     }
@@ -3760,12 +3784,17 @@ function ajax_create_api_key() {
 function ajax_toggle_api_key_status() {
     if (!session_id()) session_start();
     
-    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'reservas_nonce')) {
+    if (!isset($_SESSION['reservas_user'])) {
+        wp_send_json_error('Sesión expirada. Recarga la página e inicia sesión nuevamente.');
+        return;
+    }
+    
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'reservas_nonce')) {
         wp_send_json_error('Error de seguridad');
         return;
     }
     
-    if (!isset($_SESSION['reservas_user']) || $_SESSION['reservas_user']['role'] !== 'super_admin') {
+    if ($_SESSION['reservas_user']['role'] !== 'super_admin') {
         wp_send_json_error('Sin permisos');
         return;
     }
@@ -3785,12 +3814,17 @@ function ajax_toggle_api_key_status() {
 function ajax_delete_api_key() {
     if (!session_id()) session_start();
     
-    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'reservas_nonce')) {
+    if (!isset($_SESSION['reservas_user'])) {
+        wp_send_json_error('Sesión expirada. Recarga la página e inicia sesión nuevamente.');
+        return;
+    }
+    
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'reservas_nonce')) {
         wp_send_json_error('Error de seguridad');
         return;
     }
     
-    if (!isset($_SESSION['reservas_user']) || $_SESSION['reservas_user']['role'] !== 'super_admin') {
+    if ($_SESSION['reservas_user']['role'] !== 'super_admin') {
         wp_send_json_error('Sin permisos');
         return;
     }
@@ -3806,12 +3840,17 @@ function ajax_delete_api_key() {
 function ajax_get_api_bookings_report() {
     if (!session_id()) session_start();
     
-    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'reservas_nonce')) {
+    if (!isset($_SESSION['reservas_user'])) {
+        wp_send_json_error('Sesión expirada. Recarga la página e inicia sesión nuevamente.');
+        return;
+    }
+    
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'reservas_nonce')) {
         wp_send_json_error('Error de seguridad');
         return;
     }
     
-    if (!isset($_SESSION['reservas_user']) || !in_array($_SESSION['reservas_user']['role'], array('super_admin', 'admin'))) {
+    if (!in_array($_SESSION['reservas_user']['role'], array('super_admin', 'admin'))) {
         wp_send_json_error('Sin permisos');
         return;
     }

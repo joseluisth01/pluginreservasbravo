@@ -17182,26 +17182,21 @@ function loadApiKeysSection() {
         </div>
     `;
 
-    // Poner la URL base
     document.getElementById('api-base-url').textContent = window.location.origin + '/wp-json/reservas/v1/';
 
-    // TEST TEMPORAL - borrar después
-jQuery.ajax({
-    url: reservasAjax.ajax_url,
-    type: 'POST',
-    data: { action: 'test_api_section', nonce: reservasAjax.nonce },
-    success: function(r) { console.log('TEST RESULT:', r); },
-    error: function(xhr) { console.log('TEST ERROR:', xhr.status, xhr.responseText); }
-});
-
-    // Cargar la tabla de keys via AJAX
     jQuery.ajax({
         url: reservasAjax.ajax_url,
         type: 'POST',
-        data: { action: 'get_api_keys_list', nonce: reservasAjax.nonce },
+        data: { 
+            action: 'get_api_keys_list', 
+            nonce: reservasAjax.nonce 
+        },
         success: function(r) {
+            console.log('API Keys response:', r);
+            
             if (!r.success) {
-                document.getElementById('api-keys-table-container').innerHTML = '<div class="error">Error cargando API keys: ' + r.data + '</div>';
+                document.getElementById('api-keys-table-container').innerHTML = 
+                    '<div class="error">Error cargando API keys: ' + r.data + '</div>';
                 return;
             }
 
@@ -17246,8 +17241,10 @@ jQuery.ajax({
                 </table>
             `;
         },
-        error: function() {
-            document.getElementById('api-keys-table-container').innerHTML = '<div class="error">Error de conexión</div>';
+        error: function(xhr, status, error) {
+            console.error('Error cargando API keys:', xhr.status, xhr.responseText);
+            document.getElementById('api-keys-table-container').innerHTML = 
+                '<div class="error">Error de conexión (' + xhr.status + '). Comprueba la consola para más detalles.</div>';
         }
     });
 }
