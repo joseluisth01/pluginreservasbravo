@@ -17186,11 +17186,14 @@ function loadApiKeysSection() {
     `;
 
     document.getElementById('api-base-url').textContent = window.location.origin + '/wp-json/reservas/v1/';
+    refreshApiKeysList();
+}
 
+function refreshApiKeysList() {
     jQuery.ajax({
         url: reservasAjax.ajax_url,
         type: 'POST',
-        data: { action: 'reservas_get_api_keys' },
+        data: { action: 'reservas_get_api_keys', nonce: reservasAjax.nonce },
         success: function(r) {
             if (!r.success) {
                 document.getElementById('api-keys-table-container').innerHTML =
@@ -17240,6 +17243,7 @@ function loadApiKeysSection() {
         error: function(xhr) {
             document.getElementById('api-keys-table-container').innerHTML =
                 '<div class="error">Error de conexión (' + xhr.status + ').</div>';
+            console.error('AJAX error:', xhr.status, xhr.responseText);
         }
     });
 }
@@ -17282,13 +17286,13 @@ function createApiKey() {
     jQuery.ajax({
         url: reservasAjax.ajax_url,
         type: 'POST',
-        data: { action: 'reservas_create_api_key', partner_name: name, request_limit: limit },
+        data: { action: 'reservas_create_api_key', partner_name: name, request_limit: limit, nonce: reservasAjax.nonce },
         success: function(r) {
             jQuery('#api-modal').remove();
             if (r.success) {
                 const d = r.data;
                 alert(`✅ API Key creada para ${d.partner_name}\n\nAPI Key:\n${d.api_key}\n\nAPI Secret:\n${d.api_secret}\n\n⚠️ GUARDA EL SECRET AHORA, no se volverá a mostrar.`);
-                loadApiKeysSection();
+                refreshApiKeysList();
             } else {
                 alert('Error: ' + r.data);
             }
@@ -17302,8 +17306,8 @@ function toggleApiKeyStatus(id, currentStatus) {
     jQuery.ajax({
         url: reservasAjax.ajax_url,
         type: 'POST',
-        data: { action: 'reservas_toggle_api_key', key_id: id, status: newStatus },
-        success: function(r) { if (r.success) loadApiKeysSection(); }
+        data: { action: 'reservas_toggle_api_key', key_id: id, status: newStatus, nonce: reservasAjax.nonce },
+        success: function(r) { if (r.success) refreshApiKeysList(); }
     });
 }
 
@@ -17312,8 +17316,8 @@ function deleteApiKey(id, name) {
     jQuery.ajax({
         url: reservasAjax.ajax_url,
         type: 'POST',
-        data: { action: 'reservas_delete_api_key', key_id: id },
-        success: function(r) { if (r.success) loadApiKeysSection(); }
+        data: { action: 'reservas_delete_api_key', key_id: id, nonce: reservasAjax.nonce },
+        success: function(r) { if (r.success) refreshApiKeysList(); }
     });
 }
 
@@ -17326,7 +17330,7 @@ function loadApiBookingsReport() {
     jQuery.ajax({
         url: reservasAjax.ajax_url,
         type: 'POST',
-        data: { action: 'reservas_api_bookings_report', date_from: from, date_to: to },
+        data: { action: 'reservas_api_bookings_report', date_from: from, date_to: to, nonce: reservasAjax.nonce },
         success: function(r) {
             if (!r.success) return;
             const d = r.data;

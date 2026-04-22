@@ -3682,161 +3682,95 @@ function check_redsys_return_url_visitas()
 }
 
 
-add_action('wp_ajax_reservas_get_api_keys',        'ajax_get_api_keys_list');
-add_action('wp_ajax_reservas_create_api_key',      'ajax_create_api_key');
-add_action('wp_ajax_reservas_toggle_api_key',      'ajax_toggle_api_key_status');
-add_action('wp_ajax_reservas_delete_api_key',      'ajax_delete_api_key');
-add_action('wp_ajax_reservas_api_bookings_report', 'ajax_get_api_bookings_report');
-
-// En sistema-reservas.php, reemplaza estas 5 funciones:
+add_action('wp_ajax_reservas_get_api_keys', 'ajax_get_api_keys_list');
 
 function ajax_get_api_keys_list() {
     if (!session_id()) session_start();
-    
     if (!isset($_SESSION['reservas_user']) || $_SESSION['reservas_user']['role'] !== 'super_admin') {
-        wp_send_json_error('Sin permisos');
-        return;
+        wp_send_json_error('Sin permisos'); return;
     }
-
     global $wpdb;
     $table = $wpdb->prefix . 'reservas_api_keys';
-
-    $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table'") == $table;
-    if (!$table_exists) {
-        wp_send_json_error('La tabla de API keys no existe. Desactiva y reactiva el plugin.');
-        return;
+    if ($wpdb->get_var("SHOW TABLES LIKE '$table'") != $table) {
+        wp_send_json_error('Tabla no existe. Desactiva y reactiva el plugin.'); return;
     }
-
-    $keys = $wpdb->get_results(
-        "SELECT id, partner_name, api_key, status, requests_today, requests_limit, last_request
-         FROM $table ORDER BY id DESC"
-    );
-
+    $keys = $wpdb->get_results("SELECT id, partner_name, api_key, status, requests_today, requests_limit, last_request FROM $table ORDER BY id DESC");
     wp_send_json_success($keys ? $keys : array());
 }
 
+add_action('wp_ajax_reservas_create_api_key', 'ajax_create_api_key');
+
 function ajax_create_api_key() {
     if (!session_id()) session_start();
-    
     if (!isset($_SESSION['reservas_user']) || $_SESSION['reservas_user']['role'] !== 'super_admin') {
-        wp_send_json_error('Sin permisos');
-        return;
+        wp_send_json_error('Sin permisos'); return;
     }
-    
     global $wpdb;
     $name  = sanitize_text_field($_POST['partner_name'] ?? '');
     $limit = max(10, intval($_POST['request_limit'] ?? 1000));
-    
-    if (empty($name)) {
-        wp_send_json_error('El nombre es obligatorio');
-        return;
-    }
-    
+    if (empty($name)) { wp_send_json_error('El nombre es obligatorio'); return; }
     $api_key    = 'RES_' . strtoupper(substr(md5(uniqid(rand(), true)), 0, 20));
     $api_secret = bin2hex(random_bytes(20));
-    
     $result = $wpdb->insert(
         $wpdb->prefix . 'reservas_api_keys',
-        array(
-            'partner_name'   => $name,
-            'api_key'        => $api_key,
-            'api_secret'     => $api_secret,
-            'requests_limit' => $limit,
-            'status'         => 'active',
-        )
+        array('partner_name' => $name, 'api_key' => $api_key, 'api_secret' => $api_secret, 'requests_limit' => $limit, 'status' => 'active')
     );
-    
-    if (!$result) {
-        wp_send_json_error('Error creando la API key: ' . $wpdb->last_error);
-        return;
-    }
-    
-    wp_send_json_success(array(
-        'partner_name' => $name,
-        'api_key'      => $api_key,
-        'api_secret'   => $api_secret,
-    ));
+    if (!$result) { wp_send_json_error('Error creando la API key: ' . $wpdb->last_error); return; }
+    wp_send_json_success(array('partner_name' => $name, 'api_key' => $api_key, 'api_secret' => $api_secret));
 }
+
+add_action('wp_ajax_reservas_toggle_api_key', 'ajax_toggle_api_key_status');
 
 function ajax_toggle_api_key_status() {
     if (!session_id()) session_start();
-    
     if (!isset($_SESSION['reservas_user']) || $_SESSION['reservas_user']['role'] !== 'super_admin') {
-        wp_send_json_error('Sin permisos');
-        return;
+        wp_send_json_error('Sin permisos'); return;
     }
-    
     global $wpdb;
     $id     = intval($_POST['key_id'] ?? 0);
     $status = ($_POST['status'] ?? '') === 'active' ? 'active' : 'suspended';
-    
-    if (!$id) {
-        wp_send_json_error('ID de API key no válido');
-        return;
-    }
-    
-    $result = $wpdb->update(
-        $wpdb->prefix . 'reservas_api_keys',
-        array('status' => $status),
-        array('id' => $id)
-    );
-    
+    if (!$id) { wp_send_json_error('ID no válido'); return; }
+    $wpdb->update($wpdb->prefix . 'reservas_api_keys', array('status' => $status), array('id' => $id));
     wp_send_json_success('Estado actualizado correctamente');
 }
 
+add_action('wp_ajax_reservas_delete_api_key', 'ajax_delete_api_key');
+
 function ajax_delete_api_key() {
     if (!session_id()) session_start();
-    
     if (!isset($_SESSION['reservas_user']) || $_SESSION['reservas_user']['role'] !== 'super_admin') {
-        wp_send_json_error('Sin permisos');
-        return;
+        wp_send_json_error('Sin permisos'); return;
     }
-    
     global $wpdb;
     $id = intval($_POST['key_id'] ?? 0);
-    
-    if (!$id) {
-        wp_send_json_error('ID de API key no válido');
-        return;
-    }
-    
+    if (!$id) { wp_send_json_error('ID no válido'); return; }
     $wpdb->delete($wpdb->prefix . 'reservas_api_keys', array('id' => $id));
     wp_send_json_success('API key eliminada correctamente');
 }
 
+add_action('wp_ajax_reservas_api_bookings_report', 'ajax_get_api_bookings_report');
+
 function ajax_get_api_bookings_report() {
     if (!session_id()) session_start();
-    
     if (!isset($_SESSION['reservas_user']) || !in_array($_SESSION['reservas_user']['role'], array('super_admin', 'admin'))) {
-        wp_send_json_error('Sin permisos');
-        return;
+        wp_send_json_error('Sin permisos'); return;
     }
-    
     global $wpdb;
-    $table = $wpdb->prefix . 'reservas_api_bookings';
     $from  = sanitize_text_field($_POST['date_from'] ?? date('Y-m-01'));
     $to    = sanitize_text_field($_POST['date_to']   ?? date('Y-m-d'));
-    
-    $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table'") == $table;
-    if (!$table_exists) {
-        wp_send_json_error('La tabla de reservas API no existe.');
-        return;
+    $table = $wpdb->prefix . 'reservas_api_bookings';
+    if ($wpdb->get_var("SHOW TABLES LIKE '$table'") != $table) {
+        wp_send_json_success(array('bookings' => array(), 'total_seats' => 0, 'total_bookings' => 0)); return;
     }
-    
     $bookings = $wpdb->get_results($wpdb->prepare(
-        "SELECT * FROM $table WHERE fecha BETWEEN %s AND %s ORDER BY created_at DESC",
-        $from, $to
+        "SELECT * FROM $table WHERE fecha BETWEEN %s AND %s ORDER BY created_at DESC", $from, $to
     ));
-    
-    $total_seats = array_sum(array_column($bookings ?? [], 'seats'));
-    
     wp_send_json_success(array(
         'bookings'       => $bookings ? $bookings : array(),
-        'total_seats'    => $total_seats,
+        'total_seats'    => array_sum(array_column($bookings ?? [], 'seats')),
         'total_bookings' => count($bookings ?? []),
     ));
 }
-
 
 // ✅ FUNCIÓN TEMPORAL PARA ACTUALIZAR TABLA
 add_action('wp_ajax_force_update_services_table', 'force_update_services_table_manual');
